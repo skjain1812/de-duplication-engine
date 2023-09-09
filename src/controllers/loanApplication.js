@@ -29,7 +29,10 @@ const createLoanApplication = async (req, res) => {
     // Calculate and save all predictors
     await calculateAndSavePredictors(newLoanApplication, data);
 
-    res.status(201).json({ newLoanApplication });
+    // Calculate the isFraudApplication based on predictors
+    const isFraudApplication = await calculateIsFraudApplication(newLoanApplication._id);
+
+    res.status(201).json({ newLoanApplication, isFraudApplication });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -145,6 +148,22 @@ const savePredictor = async (transactionId, predictorName, predictorValue) => {
     await predictor.save();
   } catch (error) {
     console.error('Error saving predictor:', error);
+  }
+};
+
+const calculateIsFraudApplication = async (transactionId) => {
+  try {
+    // Calculate isFraudApplication based on predictors
+    const predictors = await Predictor.find({ transactionId });
+    for (const predictor of predictors) {
+      if (predictor.predictorValue > 0) {
+        return true; // If any predictor has a value greater than 0, consider it a fraud application
+      }
+    }
+    return false; // No predictor has a value greater than 0, not a fraud application
+  } catch (error) {
+    console.error('Error calculating isFraudApplication:', error);
+    return false; // Default to not a fraud application in case of an error
   }
 };
 
