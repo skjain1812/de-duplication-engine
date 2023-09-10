@@ -3,6 +3,7 @@ const LoanApplication = require('../models/loanApplication');
 const PivotLoanApplication = require('../models/pivotLoanApplication');
 const Predictor = require('../models/predictor');
 const db = require('../controllers/database-controller');
+const ClientPredictorConfiguration = require('../models/clientPredictorConfiguration');
 
 const createLoanApplication = async (req, res) => {
   try {
@@ -153,18 +154,32 @@ const savePredictor = async (transactionId, predictorName, predictorValue) => {
 
 const calculateIsFraudApplication = async (transactionId) => {
   try {
-    // You can implement the logic here to determine if it's a fraud application
-    // For example, check if any of the predictors have a value greater than 0
+    // Fetch all predictors for the given transactionId
     const predictors = await Predictor.find({ transactionId: transactionId });
     for (const predictor of predictors) {
-      if (predictor.predictorValue > 0) {
-        return true; // It's a fraud application
+      const { predictorName, predictorValue } = predictor;
+
+      // Fetch the client predictor configuration for the same predictorName
+      const clientPredictorConfig = await ClientPredictorConfiguration.findOne({
+        clientId: transactionId.clientId,
+        loanTypeId: transactionId.loanTypeId,
+        'config.predictorType': predictorName,
+      });
+
+      if (clientPredictorConfig) {
+        const configEntry = clientPredictorConfig.config.find(
+          (entry) => entry.predictorType === predictorName
+        );
+
+        if (configEntry && predictorValue > configEntry.predictorValue) {
+          return false; // It's not a fraud application
+        }
       }
     }
-    return false; // It's not a fraud application
+    return true; // It's a fraud application if no threshold exceeded
   } catch (error) {
     console.error('Error calculating isFraudApplication:', error);
-    return false; // Assume it's not a fraud application on error
+    return true; // Assume it's a fraud application on error
   }
 };
 
