@@ -32,7 +32,7 @@ const createLoanApplication = async (req, res) => {
     // Calculate the isFraudApplication based on predictors
     const isFraudApplication = await calculateIsFraudApplication(newLoanApplication._id);
 
-    res.status(201).json({ newLoanApplication, isFraudApplication });
+    res.status(201).json({ newLoanApplicationId: newLoanApplication._id, isFraudApplication });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -153,17 +153,18 @@ const savePredictor = async (transactionId, predictorName, predictorValue) => {
 
 const calculateIsFraudApplication = async (transactionId) => {
   try {
-    // Calculate isFraudApplication based on predictors
-    const predictors = await Predictor.find({ transactionId });
+    // You can implement the logic here to determine if it's a fraud application
+    // For example, check if any of the predictors have a value greater than 0
+    const predictors = await Predictor.find({ transactionId: transactionId });
     for (const predictor of predictors) {
       if (predictor.predictorValue > 0) {
-        return true; // If any predictor has a value greater than 0, consider it a fraud application
+        return true; // It's a fraud application
       }
     }
-    return false; // No predictor has a value greater than 0, not a fraud application
+    return false; // It's not a fraud application
   } catch (error) {
     console.error('Error calculating isFraudApplication:', error);
-    return false; // Default to not a fraud application in case of an error
+    return false; // Assume it's not a fraud application on error
   }
 };
 
