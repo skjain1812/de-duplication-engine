@@ -31,7 +31,7 @@ const createLoanApplication = async (req, res) => {
     await calculateAndSavePredictors(newLoanApplication, data);
 
     // Calculate the isFraudApplication based on predictors
-    const isFraudApplication = await calculateIsFraudApplication(newLoanApplication._id);
+    const isFraudApplication = await calculateIsFraudApplication(newLoanApplication._id, newLoanApplication.clientId, newLoanApplication.loanTypeId);
 
     res.status(201).json({ newLoanApplicationId: newLoanApplication._id, isFraudApplication });
   } catch (error) {
@@ -152,34 +152,57 @@ const savePredictor = async (transactionId, predictorName, predictorValue) => {
   }
 };
 
-const calculateIsFraudApplication = async (transactionId) => {
+const calculateIsFraudApplication = async (transactionId, clientId, loanTypeId) => {
   try {
     // Fetch all predictors for the given transactionId
     const predictors = await Predictor.find({ transactionId: transactionId });
-    for (const predictor of predictors) {
-      const { predictorName, predictorValue } = predictor;
+    // Fetch the client predictor configuration
+    const clientPredictorConfig = await ClientPredictorConfiguration.findByLoanTypeAndClient(
+      loanTypeId,
+      clientId
+    );
 
-      // Fetch the client predictor configuration for the same predictorName
-      const clientPredictorConfig = await ClientPredictorConfiguration.findOne({
-        clientId: transactionId.clientId,
-        loanTypeId: transactionId.loanTypeId,
-        'config.predictorType': predictorName,
-      });
+    // const allConfigurations = await ClientPredictorConfiguration.findAllConfigurations();
 
-      if (clientPredictorConfig) {
-        const configEntry = clientPredictorConfig.config.find(
-          (entry) => entry.predictorType === predictorName
-        );
+    // console.log('allConfigurations : ' + JSON.stringify(allConfigurations));
+    // console.log('clientPredictorConfig : ' + JSON.stringify(clientPredictorConfig));
+    if (!clientPredictorConfig) {
+      //console.log('Absent');
+      // No configuration found, assume it's not fraud
+      return {
+        isFraud: false,
+        failedPredictors: [],
+      };
+    }
 
-        if (configEntry && predictorValue > configEntry.predictorValue) {
-          return false; // It's not a fraud application
-        }
+    const config = clientPredictorConfig.config;
+    const failedPredictors = [];
+
+    for (const configEntry of config) {
+      const { predictorType, predictorValue } = configEntry;
+
+      // Find the predictor with the same predictorType
+      const matchingPredictor = predictors.find(
+        (predictor) => predictor.predictorName === predictorType
+      );
+
+      if (matchingPredictor.predictorValue > predictorValue) {
+        failedPredictors.push(predictorType);
       }
     }
-    return true; // It's a fraud application if no threshold exceeded
+
+    const isFraud = failedPredictors.length > 0;
+
+    return {
+      isFraud: isFraud,
+      failedPredictors: failedPredictors,
+    };
   } catch (error) {
     console.error('Error calculating isFraudApplication:', error);
-    return true; // Assume it's a fraud application on error
+    return {
+      isFraud: true, // Assume it's a fraud application on error
+      failedPredictors: [],
+    };
   }
 };
 
